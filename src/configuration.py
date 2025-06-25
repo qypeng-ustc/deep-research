@@ -8,10 +8,8 @@ from langchain_core.runnables import RunnableConfig
 class Configuration(BaseModel):
     """The configuration for the agent.
     """
-    coordinator_model_info: str = Field(
-        default="DeepSeek:DeepSeek-V3",
-        description="The provider and name of the language model to use for the coordinator agent.",
-    )
+    coordinator_model_name: str = 'DeepSeek-V3'
+    coordinator_model_provider: str = 'DeepSeek'
     planner_model_info: str = Field(
         default="DeepSeek:DeepSeek-V3",
         description="The provider and name of the language model to use for the plan agent.",
