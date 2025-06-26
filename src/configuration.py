@@ -8,15 +8,15 @@ from langchain_core.runnables import RunnableConfig
 class Configuration(BaseModel):
     """The configuration for the agent.
     """
-    coordinator_model_name: str = 'DeepSeek-V3'
-    coordinator_model_provider: str = 'DeepSeek'
-    planner_model_info: str = Field(
-        default="DeepSeek:DeepSeek-V3",
-        description="The provider and name of the language model to use for the plan agent.",
-    )
-    max_plan_iterations: int = 1  # Maximum number of plan iterations
-    max_step_num: int = 3  # Maximum number of steps in a plan
-    max_search_results: int = 3  # Maximum number of search results
+    chat_model_name: str = 'DeepSeek-V3'
+    chat_model_provider: str = 'DeepSeek'
+    plan_model_name: str = 'DeepSeek-V3'
+    plan_model_provider: str = 'DeepSeek'
+
+    auto_accepted_plan: bool = False
+    max_plan_iterations: int = 1
+    max_step_num: int = 3
+    max_search_results: int = 3
 
     @classmethod
     def from_runnable_config(

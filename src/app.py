@@ -6,6 +6,7 @@ from typing import Annotated, cast
 from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 from uuid import uuid4
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,13 @@ from langchain_core.messages import AIMessageChunk, ToolMessage, BaseMessage
 from langgraph.types import Command
 
 from src.graph import build_graph_with_memory
+from src.configuration import Configuration
 
+
+load_dotenv()
+
+if os.getenv("DEBUG", False):
+    logging.getLogger("src").setLevel(logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
@@ -41,40 +48,24 @@ class ChatRequest(BaseModel):
     messages: Optional[List[ChatMessage]] = Field(
         [], description="History of messages between the user and the assistant"
     )
-    debug: Optional[bool] = Field(False, description="Whether to enable debug logging")
     thread_id: Optional[str] = Field(
         "__default__", description="A specific conversation identifier"
     )
-    max_plan_iterations: Optional[int] = Field(
-        1, description="The maximum number of plan iterations"
-    )
-    max_step_num: Optional[int] = Field(
-        3, description="The maximum number of steps in a plan"
-    )
-    max_search_results: Optional[int] = Field(
-        3, description="The maximum number of search results"
-    )
-    auto_accepted_plan: Optional[bool] = Field(
-        False, description="Whether to automatically accept the plan"
-    )
-    interrupt_feedback: Optional[str] = Field(
+    replan_instruction: Optional[str] = Field(
         None, description="Interrupt feedback from the user on the plan"
     )
+
+
+def _make_event(event_type: str, data: dict[str, any]):
+    if data.get("content") == "":
+        data.pop("content")
+    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 app = FastAPI(
     title="DeepResearch API",
     description="API for DeepResearch",
     version="0.1.0"
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
 )
 
 graph = build_graph_with_memory()
@@ -88,7 +79,7 @@ async def chat_stream(request: ChatRequest):
         _astream_agent_generator(
             request.model_dump()["messages"],
             thread_id,
-            request.interrupt_feedback
+            request.replan_instruction
         ),
         media_type="text/event-stream"
     )
@@ -97,35 +88,23 @@ async def chat_stream(request: ChatRequest):
 async def _astream_agent_generator(
     messages: List[dict],
     thread_id: str,
-    auto_accepted_plan: bool,
-    max_plan_iterations: int,
-    max_step_num: int,
-    max_search_results: int,
-    interrupt_feedback: str
+    replan_instruction: str
 ):
-    input_ = {
-        "messages": messages,
-        "plan_iterations": 0,
-        "current_plan": None,
-        "auto_accepted_plan": auto_accepted_plan,
-        "research_topic": messages[-1]["content"] if messages else "",
-    }
-    if not auto_accepted_plan and interrupt_feedback:
-        resume_msg = f"[{interrupt_feedback}]"
-        # add the last message to the resume message
+    config = Configuration.from_runnable_config()
+
+    if not config.auto_accepted_plan and replan_instruction:
+        resume_msg = f"[{replan_instruction}]"
         if messages:
             resume_msg += f" {messages[-1]['content']}"
         input_ = Command(resume=resume_msg)
+    else:
+        input_ = {"messages": messages}
+
     async for agent, _, event_data in graph.astream(
         input_,
-        config={
-            "thread_id": thread_id,
-            "max_plan_iterations": max_plan_iterations,
-            "max_step_num": max_step_num,
-            "max_search_results": max_search_results
-        },
+        config={"configurable": dict(thread_id=thread_id, **config.model_dump())},
         stream_mode=["messages", "updates"],
-        subgraphs=True,
+        subgraphs=True
     ):
         if isinstance(event_data, dict):
             if "__interrupt__" in event_data:
@@ -184,9 +163,3 @@ async def _astream_agent_generator(
             else:
                 # AI Message - Raw message tokens
                 yield _make_event("message_chunk", event_stream_message)
-
-
-def _make_event(event_type: str, data: dict[str, any]):
-    if data.get("content") == "":
-        data.pop("content")
-    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"

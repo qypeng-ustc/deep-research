@@ -81,12 +81,8 @@ class Plan(BaseModel):
 
 
 class OverallState(MessagesState):
-    """State for the agent system, extends MessagesState with next field."""
-
-    # Runtime Variables
     locale: str = "zh-CN"
     research_topic: str = ""
-    auto_accepted_plan: bool = False
     plan_iterations: int = 0
     current_plan: Plan | str = None
 
@@ -100,15 +96,14 @@ def handoff_to_planner(
     return
 
 
-def init_model(model_info, **kwargs):
-    model_provider, model_name = model_info.split(':')
-    model_provider = model_provider.upper()
+def init_model(name, provider, **kwargs):
+    provider = provider.upper()
 
-    api_key = os.getenv(f'{model_provider}_API_KEY')
-    base_url = os.getenv(f'{model_provider}_BASE_URL')
-    
+    api_key = os.getenv(f'{provider}_API_KEY')
+    base_url = os.getenv(f'{provider}_BASE_URL')
+
     model = ChatOpenAI(
-        model=model_name, api_key=api_key, base_url=base_url, **kwargs
+        model=name, api_key=api_key, base_url=base_url, **kwargs
     )
     return model
 
@@ -118,13 +113,15 @@ def coordinator_node(
 ) -> Command[Literal["Planner", "__end__"]]:
     """Coordinator that communicate with users and delivery the task to Planner.
     """
-    logger.info("Coordinator.")
-    configurable = Configuration.from_runnable_config(config)
+    logger.info(f"Coordinator starts with State: {state}")
+    config = Configuration.from_runnable_config(config)
 
     model = init_model(
-        configurable.coordinator_model_info, 
+        name=config.chat_model_name,
+        provider=config.chat_model_provider,
         temperature=1.0, 
-        max_retries=2
+        max_retries=2,
+        extra_body={"thinking": {"type": "disabled"}}
     ).bind_tools([handoff_to_planner])
 
     system_prompt = COORDINATOR_PROMPT.format(
@@ -136,7 +133,6 @@ def coordinator_node(
     response = model.invoke(messages)
 
     logger.debug(f"Response from LLM: {response}")
-    logger.debug(f"Current state: {state}")
 
     locale = state.get("locale", "zh-CN")  # Default locale if not specified
     research_topic = state.get("research_topic", "")
@@ -162,9 +158,10 @@ def coordinator_node(
         except Exception as e:
             logger.error(f"Error processing tool calls: {e}")
 
-    logger.debug(f"Coordinator response: {response}")
-    return {"content": response.content}
-
+    return Command(
+        update={"messages": [AIMessage(content=response.content)]},
+        goto='__end__'
+    )
 
 
 def planner_node(
@@ -172,25 +169,27 @@ def planner_node(
 ) -> Command[Literal["HumanFeedback", "__end__"]]:
     """Planner that generate the full plan or replan with human feedback.
     """
-    logger.info("Planner generating full plan")
-    configurable = Configuration.from_runnable_config(config)
+    logger.info(f"Planner starts with State: {state}")
+    config = Configuration.from_runnable_config(config)
 
     plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
     
     # if the plan iterations is greater than the max plan iterations, return the reporter node
-    if plan_iterations >= configurable.max_plan_iterations:
+    if plan_iterations >= config.max_plan_iterations:
         return Command(goto="__end__")
 
     model = init_model(
-        configurable.planner_model_info,
-        temperature=0.7, 
-        max_retries=2
+        name=config.plan_model_name,
+        provider=config.plan_model_provider,
+        temperature=1,
+        max_retries=2,
+        extra_body={"thinking": {"type": "disabled"}}
     ).with_structured_output(Plan, method="json_mode")
 
     system_prompt = PLANNER_PROMPT.format(
         current_time=get_current_time(),
         current_location=get_current_location(),
-        max_step_num=configurable.max_step_num,
+        max_step_num=config.max_step_num,
         locale=state["locale"]
     )
     
@@ -198,12 +197,8 @@ def planner_node(
     response = model.invoke(messages)
 
     logger.debug(f"Response from LLM: {response}")
-    logger.debug(f"Current state: {state}")
 
     full_response = response.model_dump_json(indent=4, exclude_none=True)
-
-    logger.debug(f"Current state messages: {state['messages']}")
-    logger.info(f"Planner response: {full_response}")
 
     try:
         current_plan = json.loads(repair_json_output(full_response))
@@ -229,7 +224,7 @@ def planner_node(
 
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="Planner")],
+            "messages": [AIMessage(content=full_response)],
             "current_plan": current_plan,
         },
         goto="human_feedback",

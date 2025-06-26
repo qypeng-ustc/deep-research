@@ -28,7 +28,6 @@ signal.signal(signal.SIGINT, handle_shutdown)
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="Run the DeepResearch API server"
     )
