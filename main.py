@@ -2,54 +2,50 @@ import argparse
 import logging
 import os
 import asyncio
+
+from uuid import uuid4
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessageChunk
-from src.graph import build_graph
-from src.configuration import Configuration
+
+from src.workflow import _astream_agent_generator
 
 
 logging.basicConfig(
+    filename='main.log', encoding='utf-8',
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 logger = logging.getLogger(__name__)
 
+load_dotenv()
+
 if os.getenv("DEBUG", False):
     logging.getLogger("src").setLevel(logging.DEBUG)
 
-graph = build_graph()
 
+async def chat_stream(user_input):
+    messages = [
+        {"role": "user", "content": user_input}
+    ]
+    replan_instruction = ""
 
-async def _astream_agent_generator(user_input: str):
-    logger.info(f"Starting agent with user input: {user_input}")
-    config = Configuration.from_runnable_config()
-
-    input_ = {
-        "messages": [{"role": "user", "content": user_input}]
-    }
-
-    title = []
-
-    async for agent, mode, event in graph.astream(
-        input_,
-        config={"configurable": dict(thread_id="__default__", **config.model_dump())},
-        stream_mode=["messages", "updates"],
-        subgraphs=True
+    async for event_type, event_data in _astream_agent_generator(
+        messages=messages,
+        thread_id="__default__",
+        replan_instruction=replan_instruction
     ):
-        if mode == 'messages' and agent[0].startswith('Coordinator'):
-            chunk = event[0]
-            if isinstance(chunk, AIMessageChunk) and len(chunk.response_metadata) == 0:
-                print(chunk.content, end='', flush=True)
-            else:
-                print("\n")
-        elif mode == 'messages' and agent[0].startswith('Planner'):
-            chunk = event[0]
-            print(chunk)
-            # if isinstance(chunk, AIMessageChunk):
-            #     if chunk.content.startswith('thought')
+        if event_type == "interrupt":
+            replan_instruction = input(f"{event_data.get('content')}: ")
+            continue
+        print(event_data.get('content'))
 
-    logger.info("Async run agent successfully\n")
+    if len(replan_instruction) > 0:
+        async for event_type, event_data in _astream_agent_generator(
+            messages=[],
+            thread_id="__default__",
+            replan_instruction=replan_instruction
+        ):
+            print(event_data.get('content'))
 
 
 if __name__ == "__main__":
@@ -62,10 +58,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.query:
-        input_ = " ".join(args.query)
+        user_input = " ".join(args.query)
     else:
-        input_ = input("Enter your query: ")
+        user_input = input("Enter your query: ")
 
     asyncio.run(
-        _astream_agent_generator(user_input=input_)
+        chat_stream(user_input=user_input)
     )

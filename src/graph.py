@@ -121,7 +121,8 @@ def coordinator_node(
         provider=config.chat_model_provider,
         temperature=1.0, 
         max_retries=2,
-        extra_body={"thinking": {"type": "disabled"}}
+        extra_body={"thinking": {"type": "disabled"}},
+        disable_streaming=True
     ).bind_tools([handoff_to_planner])
 
     system_prompt = COORDINATOR_PROMPT.format(
@@ -159,7 +160,7 @@ def coordinator_node(
             logger.error(f"Error processing tool calls: {e}")
 
     return Command(
-        update={"messages": [AIMessage(content=response.content)]},
+        update={"messages": [AIMessage(content=response.content, name='Coordinator')]},
         goto='__end__'
     )
 
@@ -183,7 +184,9 @@ def planner_node(
         provider=config.plan_model_provider,
         temperature=1,
         max_retries=2,
-        extra_body={"thinking": {"type": "disabled"}}
+        max_tokens=4096,
+        extra_body={"thinking": {"type": "disabled"}},
+        disable_streaming=True
     ).with_structured_output(Plan, method="json_mode")
 
     system_prompt = PLANNER_PROMPT.format(
@@ -227,14 +230,14 @@ def planner_node(
             "messages": [AIMessage(content=full_response)],
             "current_plan": current_plan,
         },
-        goto="human_feedback",
+        goto="HumanFeedback",
     )
 
 
 def human_feedback_node(
-    state,
+    state: OverallState, config: RunnableConfig
 ) -> Command[Literal["Planner", "__end__"]]:
-    logger.info("Human Feedback")
+    logger.info(f"Human Feedback starts with state: {state}")
     current_plan = state.get("current_plan", "")
     # check if the plan is auto accepted
     auto_accepted_plan = state.get("auto_accepted_plan", False)
@@ -243,10 +246,11 @@ def human_feedback_node(
 
         # if the feedback is not accepted, return the planner node
         if feedback and str(feedback).upper().startswith("[EDIT_PLAN]"):
+            logger.info(f"Replan instruction: {feedback}")
             return Command(
                 update={
                     "messages": [
-                        HumanMessage(content=feedback, name="feedback"),
+                        HumanMessage(content=feedback, name="HumanFeedback"),
                     ],
                 },
                 goto="Planner",

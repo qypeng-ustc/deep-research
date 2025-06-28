@@ -8,9 +8,9 @@ from langchain_core.runnables import RunnableConfig
 class Configuration(BaseModel):
     """The configuration for the agent.
     """
-    chat_model_name: str = 'DeepSeek-V3'
+    chat_model_name: str = 'deepseek-chat'
     chat_model_provider: str = 'DeepSeek'
-    plan_model_name: str = 'DeepSeek-V3'
+    plan_model_name: str = 'deepseek-reasoner'
     plan_model_provider: str = 'DeepSeek'
 
     auto_accepted_plan: bool = False
