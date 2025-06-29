@@ -234,6 +234,28 @@ def planner_node(
     )
 
 
+def manager_node(
+    state: OverallState, config: RunnableConfig
+) -> Command[Literal["Planner", "__end__"]]:
+    pass
+
+
+async def searcher_node(
+    state: OverallState, config: RunnableConfig  
+):
+    logger.info("Searcher node is searching.")
+    configurable = Configuration.from_runnable_config(config)
+
+    tools = [search_tool, crawl_tool]
+    logger.info(f"Researcher tools: {tools}")
+    
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "researcher",
+        tools,
+    )
+
 def human_feedback_node(
     state: OverallState, config: RunnableConfig
 ) -> Command[Literal["Planner", "__end__"]]:
