@@ -1,18 +1,26 @@
 import argparse
 import logging
+import json
 import os
 import asyncio
-
+from datetime import datetime
 from uuid import uuid4
 from dotenv import load_dotenv
 
 from src.workflow import _astream_agent_generator
 
 
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_file = os.path.join(log_dir, f"main-{timestamp}.log")
+
+log_format = "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+
 logging.basicConfig(
-    filename='main.log', encoding='utf-8',
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename=log_file, encoding='utf-8', level=logging.INFO, format=log_format
 )
 
 logger = logging.getLogger(__name__)
@@ -37,7 +45,16 @@ async def chat_stream(user_input):
         if event_type == "interrupt":
             replan_instruction = input(f"{event_data.get('content')}: ")
             continue
-        print(event_data.get('content'))
+        elif event_type == "chat":
+            print(f"Agent Chat: {event_data.get('content')}")
+        elif event_type == "topic":
+            print(f"Research Topic: {event_data.get('content')}")
+        elif event_type == "plan":
+            currplan = json.loads(event_data.get('content'))
+            print("Plan:\n")
+            print(f"{currplan['title']}")
+            for step in currplan['steps']:
+                print(f"\t{step['title']}")
 
     if len(replan_instruction) > 0:
         async for event_type, event_data in _astream_agent_generator(

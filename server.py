@@ -3,13 +3,22 @@ import logging
 import signal
 import sys
 import os
+from datetime import datetime
 import uvicorn
 from dotenv import load_dotenv
 
 
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_file = os.path.join(log_dir, f"main-{timestamp}.log")
+
+log_format = "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename=log_file, encoding='utf-8', level=logging.INFO, format=log_format
 )
 
 logger = logging.getLogger(__name__)

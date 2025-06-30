@@ -246,24 +246,20 @@ async def searcher_node(
     logger.info("Searcher node is searching.")
     configurable = Configuration.from_runnable_config(config)
 
-    tools = [search_tool, crawl_tool]
-    logger.info(f"Researcher tools: {tools}")
-    
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
-        "researcher",
-        tools,
-    )
+    # tools = [search_tool, crawl_tool]
+    # logger.info(f"Researcher tools: {tools}")
+    pass
+
 
 def human_feedback_node(
     state: OverallState, config: RunnableConfig
 ) -> Command[Literal["Planner", "__end__"]]:
     logger.info(f"Human Feedback starts with state: {state}")
+    config = Configuration.from_runnable_config(config)
+
     current_plan = state.get("current_plan", "")
-    # check if the plan is auto accepted
-    auto_accepted_plan = state.get("auto_accepted_plan", False)
-    if not auto_accepted_plan:
+
+    if not config.auto_accepted_plan:
         feedback = interrupt("Please Review the Plan.")
 
         # if the feedback is not accepted, return the planner node

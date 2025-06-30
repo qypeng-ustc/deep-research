@@ -1,0 +1,15 @@
+[project]
+name = "deep-research"
+version = "0.1.0"
+description = "Deep Research Agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "langchain-openai>=0.3.8",
+    "langgraph>=0.3.5",
+    "python-dotenv>=1.0.1",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.1",
+    "json-repair>=0.7.0",
+]

@@ -11,7 +11,6 @@ from src.configuration import Configuration
 
 logger = logging.getLogger(__name__)
 
-
 graph = build_graph_with_memory()
 
 
@@ -35,10 +34,10 @@ async def _astream_agent_generator(
         config={
             "configurable": dict(thread_id=thread_id, **config.model_dump())
         },
-        stream_mode=["updates"],
+        stream_mode=["messages", "updates"],
         subgraphs=True
     ):
-        logger.info(f"{stream_mode} -> {event_data}")
+        logger.info(f"{_}: {stream_mode} -> {event_data}")
 
         # if isinstance(event_data, dict):  # updates mode
         if stream_mode == 'updates':
