@@ -10,22 +10,22 @@ from dotenv import load_dotenv
 from src.workflow import _astream_agent_generator
 
 
+load_dotenv()
+
 log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-log_file = os.path.join(log_dir, f"main-{timestamp}.log")
-
-log_format = "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
 
 logging.basicConfig(
-    filename=log_file, encoding='utf-8', level=logging.INFO, format=log_format
+    filename=os.path.join(log_dir, f"main-{timestamp}.log"), 
+    encoding='utf-8', 
+    level=logging.INFO, 
+    format="%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 if os.getenv("DEBUG", False):
     logging.getLogger("src").setLevel(logging.DEBUG)
